@@ -1,2 +1,2 @@
 # CodeExamples
-Some example of srcipts created for projects. 
+Some examples of srcipts created for projects. 
