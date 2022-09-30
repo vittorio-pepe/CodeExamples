@@ -10,13 +10,14 @@ def genera_json(xml_var1, xml_var2, xml_var3):
     (schema: exampleSchema.json)
 
     - INPUT:
-        - variable list in xml format
-        - terms list in xml format
-        - equations list in xml format
+        - var1 list in xml format
+        - var2 list in xml format
+        - var3 list in xml format
 
     - OUTPUT:
         - json format file containing variables, terms and equations
-        - dictionary containing uuid of variables whose key is the variable name
+        - dictionary containing uuid of variables whose key is the 
+            variable id obtained by the corresponding xml file
     ----------------------------------------------------------------
     '''
     dict_var1_tmp = xmltodict.parse(xml_var1)
