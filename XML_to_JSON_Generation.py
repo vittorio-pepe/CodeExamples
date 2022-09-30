@@ -5,8 +5,8 @@ import uuid
 
 def genera_json(xml_var1, xml_var2, xml_var3):
     '''--------------------------------------------------------------------
-    Description: function to generate the exeampleData.json file
-    contain the variables,terms and equations in json format
+    Description: function to generate the exempleData.json file
+    contain the var1, var2 and var3 in JSON format
     (schema: exampleSchema.json)
 
     - INPUT:
@@ -78,7 +78,6 @@ def genera_json(xml_var1, xml_var2, xml_var3):
         ### creation of a dictionary as index for var2 as idnum/uuid
         var2_uuid_idx[sublist['key3_4']] = dict_var2['key1_2']
 
-
     ##### creating dictionaries list for var3 with uuid
     list_dict_var3 = []
     n_ord = 1
@@ -103,7 +102,8 @@ def genera_json(xml_var1, xml_var2, xml_var3):
         dict_var3['key8_3'] = new_sublist2
         n_ord += 1
         list_dict_var3.append(dict_var3)
-
+        
+    #### generating the ouput dictionary and conversion to JSON format
     result_dict = {'key1_7': list_dict_var3, 'key2_7': list_dict_var2, 'key3_7': list_dict_var1}
     result_json = json.dumps(result_dict, indent=4)
 
