@@ -5,27 +5,28 @@ import csv
 import numpy as np
 from Bio import SeqIO
 from tensorflow.keras.models import load_model
+from more_itertools import chunked
 
 os.environ['TF_XLA_FLAGS'] = '--tf_xla_cpu_global_jit'
 os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 print(os.getenv('TF_GPU_ALLOCATOR'))
 
-def encodeSeq(seq) :
+def encodeSeq5(seq) : 
     seq_code = list()
     for pos in range(len(seq)) :
         letter = seq[pos]
         if letter in ['A', 'a'] :
-            code = [1, 0, 0, 0]
+            code = [1,0,0,0,0]
         elif letter in ['C', 'c'] :
-            code = [0, 1, 0, 0]
+            code = [0,1,0,0,0]
         elif letter in ['G', 'g'] :
-            code = [0, 0, 1, 0]
+            code = [0,0,1,0,0]
         elif letter in ['T', 't'] :
-            code = [0, 0, 0, 1]
+            code = [0,0,0,1,0]
         else :
-            code = [1/4, 1/4, 1/4, 1/4]
+            code = [0,0,0,0,1]
         seq_code.append(code)
-    return seq_code
+    return seq_code 
 
 def batch_iterator(iterator, batch_size):
     """Returns lists of length batch_size.
@@ -126,117 +127,64 @@ if not os.path.exists(outDir2):
 # splitting input file in smaller files containing numSeqsxFile sequences
 record_iter = SeqIO.parse(open(fileName), "fasta")
 for i, batch in enumerate(batch_iterator(record_iter, numSeqsxFile)):
-    filename = "group_%i_.fa_t" % (100 + i)
+    filename = "split_%i_.fa_t" % (100 + i)
     with open(os.path.join(outDir2, filename), "w") as handle:
         count = SeqIO.write(batch, handle, "fasta")
     print("Wrote %i records to %s" % (count, filename))
 
 fileList = [f for f in os.listdir(outDir2) if f.endswith('.fa_t')]
 fileList.sort()
-filenum = 0
+num_tot_seq = 0
+j = 0
+fileCount = 1
+list_lftovr1 = []
+list_lftovr2 = []
 
 for file in fileList:
-    fileCount = 0
-    with open(os.path.join(outDir2, file), 'r') as faLines:
-        code = []
-        seqname = []
-        head = ''
-        lineNum = 0
-        seqCat = ''
-        flag = 0
-        for line in faLines:
-            if flag == 0 and line[0] == '>':
-                lineNum += 1
-                head = line.strip()
-                continue
-            elif line[0] != '>':
-                seqCat = seqCat + line.strip()
-                flag += 1
-                lineNum += 1
-            elif flag > 0 and line[0] == '>':
-                lineNum += 1
-                pos = 0
-                posEnd = pos + contigLength
-                while posEnd <= len(seqCat):
-                    contigName = NCBIName + "#" + str(contigLengthk) + "k#" + head.split('/')[-1] + "#" + str(
-                        pos) + "#" + str(posEnd)
-                    seq = seqCat
-                    countN = seq.count("N")
-                    if countN / len(seq) <= 0.3:
-                        seqname.append(">" + contigName)
-                        seqname.append(seq)
-                        seq_code = encodeSeq(seq)
-                        code.append(seq_code)
-                    pos = posEnd
-                    posEnd = pos + contigLength
+    print('Processing file: ', file)
+    NCBIName = os.path.splitext((os.path.basename(file)))[0]
+    codeFileNamefw = NCBIName+"#"+str(contigLengthk)+"k_"+"seq_"+"num-"+str(100+fileCount)+"_codefw.npy"    
+     
+    with open(os.path.join(outDir, codeFileNamefw), "bw") as f:
+        
+        records = SeqIO.parse(os.path.join(outDir2,file),"fasta")
+        for batch in chunked(records, numSeqsxFile):
+            list_seq_coded = []
+            for seqRecord in batch:
+                # print(seqRecord.id)
+                # print(repr(seqRecord.seq))
+                # print(len(seqRecord))
+                if len(seqRecord) < contigLength:
+                    print('Too short sequence!')
+                    print(seqRecord.id)
+                    print(repr(seqRecord.seq))
+                    print(len(seqRecord))
+                    list_lftovr1.append(seqRecord.id)
+                    list_lftovr2.append(seqRecord.seq)
+                    j += 1
+                    continue
+                countN = str(seqRecord.seq).count("N")
+                if countN/len(seqRecord.seq) >= 0.3:
+                    print('More than 30% N in sequence!')
+                    print(seqRecord.id)
+                    print(repr(seqRecord.seq))
+                    print(len(seqRecord))
+                    list_lftovr1.append(seqRecord.id)
+                    list_lftovr2.append(seqRecord.seq)
+                    j += 1
+                    continue
+                
+                seq_coded = encodeSeq5(seqRecord.seq)
+                list_seq_coded.append(seq_coded)
+            
+            np.save( f, np.array(list_seq_coded ,dtype = np.ubyte))
+            num_tot_seq = num_tot_seq+ len(list_seq_coded)
+        fileCount +=1     
+        
+    print("Encoded sequences are saved in {}".format(codeFileNamefw))
+    print('Total number sequences deleted: {}'.format(j))   
+    print('Total number sequences encoded: {}'.format(num_tot_seq))
 
-                    if len(seqname) > 0 and len(seqname) % 4000000 == 0:
-                        print("lineNum=" + str(lineNum) + ",contigNum=" + str(len(seqname)))
-                        fileCount += 1
-                        codeFileNamefw = NCBIName + "#" + str(contigLengthk) + "k_num" + str(fileCount) + '-' + str(
-                            filenum) + "_seq" + str(len(code)) + "_codefw.npy"
-                        nameFileName = NCBIName + "#" + str(contigLengthk) + "k_num" + str(fileCount) + '-' + str(
-                            filenum) + "_seq" + str(int(len(seqname) / 2)) + ".fasta"
-                        print("encoded sequences are saved in {}".format(codeFileNamefw))
-                        seqencodeF = open(os.path.join(outDir, codeFileNamefw), "ba+")
-                        np.save(seqencodeF, np.array(code, dtype=np.float16))
-                        seqnameF = open(os.path.join(outDir, nameFileName), "a")
-                        seqnameF.write('\n'.join(seqname) + '\n')
-                        seqnameF.close()
-                        code = []
-                        codeR = []
-                        seqname = []
-
-                flag = 0
-                seqCat = ''
-                head = line.strip()
-
-        if flag > 0:
-            lineNum += 1
-            pos = 0
-            posEnd = pos + contigLength
-            while posEnd <= len(seqCat):
-                contigName = NCBIName + "#" + str(contigLengthk) + "k#" + head.split('/')[-1] + "#" + str(
-                    pos) + "#" + str(posEnd)
-                seq = seqCat[pos:posEnd]
-                countN = seq.count("N")
-                if countN / len(seq) <= 0.3:
-                    seqname.append(">" + contigName)
-                    seqname.append(seq)
-                    seq_code = encodeSeq(seq)
-                    code.append(seq_code)
-                pos = posEnd
-                posEnd = pos + contigLength
-                if len(seqname) > 0 and len(seqname) % 4000000 == 0:
-                    print("lineNum=" + str(lineNum) + ",contigNum=" + str(len(seqname)))
-                    fileCount += 1
-                    codeFileNamefw = NCBIName + "#" + str(contigLengthk) + "k_num" + str(fileCount) + '-' + str(
-                        100 + filenum) + "_seq_codefw.npy"
-                    nameFileName = NCBIName + "#" + str(contigLengthk) + "k_num" + str(fileCount) + '-' + str(
-                        100 + filenum) + "_seq.fasta"
-                    print("encoded sequences are saved in {}".format(codeFileNamefw))
-                    seqencodeF = open(os.path.join(outDir, codeFileNamefw), "ba+")
-                    np.save(seqencodeF, np.array(code, dtype=np.float16))
-                    seqnameF = open(os.path.join(outDir, nameFileName), "a")
-                    seqnameF.write('\n'.join(seqname) + '\n')
-                    seqnameF.close()
-                    code = []
-                    codeR = []
-                    seqname = []
-
-    if len(code) > 0:
-        codeFileNamefw = NCBIName + "#" + str(contigLengthk) + "k_num" + str(fileCount) + '-' + \
-                         str(100 + filenum) + "_seq_codefw.npy"
-        nameFileName = NCBIName + "#" + str(contigLengthk) + "k_num" + str(fileCount) + '-' + \
-                       str(100 + filenum) + "_seq.fasta"
-        print("encoded sequences are saved in {}".format(codeFileNamefw))
-        seqencodeF = open(os.path.join(outDir, codeFileNamefw), "ba+")
-        np.save(seqencodeF, np.array(code, dtype=np.float16))
-        seqencodeF.close()
-        seqnameF = open(os.path.join(outDir, nameFileName), "a")
-        seqnameF.write('\n'.join(seqname) + '\n')
-        seqnameF.close()
-    filenum += 1
 
 end_time2 = time.time() - end_time1
 print('Execution time encoding', end_time2 / 60)
@@ -270,7 +218,7 @@ for fname_code, fname_seq in zip(filenames_code, filenames_seq):
         writer = csv.writer(file, delimiter='\t')
         for row in zip(head, seqL, score1, pvalue1):
             writer.writerow(row)
-    endTime = time.time() - startTime
+    endTime = time.time() - start_time
     print('Execution time writing file', endTime / 60)
 
 predF.close()
